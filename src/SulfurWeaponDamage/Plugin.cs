@@ -3,6 +3,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using PerfectRandom.Sulfur.Core;
 using PerfectRandom.Sulfur.Core.Items;
+using PerfectRandom.Sulfur.Core.Stats;
 
 namespace SulfurMods.WeaponDamage;
 
@@ -11,7 +12,7 @@ public class Plugin : BaseUnityPlugin
 {
     // Weapon type, then each weapon with the barrel length in inches of its real analogue. The
     // shortest barrel in a type is the baseline and keeps its multiplier. Every other weapon in the
-    // type has its own multiplier scaled up along the barrel curve. Caliber damage is never touched.
+    // type has its own multiplier scaled up along the barrel curve. Caliber damage is scaled separately in ScaleCalibers.
     static readonly (string type, (string name, float inches)[] weapons)[] Table =
     {
         ("Pistols", new (string, float)[]
@@ -99,7 +100,19 @@ public class Plugin : BaseUnityPlugin
         return CurvePoints[CurvePoints.Length - 1].damage;
     }
 
+    // Caliber damage relative to 9mm, from muzzle energy with the exponent fitted to the shotgun scale
+    // (9mm about 550 J = 60, 12ga pellet about 280 J = 40, so damage goes as energy^0.6). The weapon
+    // is any one gun known to fire that caliber. 9mm is the reference and stays as it is.
+    static readonly (string label, string weapon, float factor)[] Calibers =
+    {
+        ("556", "Gravekeeper", 1.97f),   // about 1700 J
+        ("762", "Salamander", 2.98f),    // about 3400 J
+        ("50BMG", "Ferryman", 7.84f),    // about 17000 J
+    };
+    const string NineMmWeapon = "Socom 9";
+
     readonly Dictionary<string, float> userFactor = new Dictionary<string, float>();
+    readonly Dictionary<string, float> caliberFactor = new Dictionary<string, float>();
     bool applied;
 
     static string Key(string text)
@@ -122,6 +135,9 @@ public class Plugin : BaseUnityPlugin
                 userFactor[Key(weapon.name)] = all * each;
             }
         }
+        foreach (var cal in Calibers)
+            caliberFactor[cal.label] = Config.Bind("Calibers", cal.label, cal.factor,
+                "Damage of this caliber as a multiple of 9mm. Set to 0 to leave the caliber alone.").Value;
         Logger.LogInfo("Weapon damage loaded.");
     }
 
@@ -143,9 +159,42 @@ public class Plugin : BaseUnityPlugin
                 continue;
             found[Key(weapon.name.StartsWith("Weapon_") ? weapon.name.Substring(7) : weapon.name)] = weapon;
         }
+        if (!ScaleCalibers(found))
+            return;
         applied = true;
         foreach (var row in Table)
             Apply(row.type, row.weapons, found);
+    }
+
+    static CaliberType Caliber(WeaponSO weapon)
+    {
+        try { return weapon.caliber.GetAsset(); }
+        catch { return null; }
+    }
+
+    bool ScaleCalibers(Dictionary<string, WeaponSO> found)
+    {
+        if (!found.TryGetValue(Key(NineMmWeapon), out var reference))
+        {
+            Logger.LogWarning("No 9mm reference weapon found, calibers left alone.");
+            return true;
+        }
+        var nine = Caliber(reference);
+        if (nine == null)
+            return false;
+        float reference9 = nine.baseDamage;
+        foreach (var cal in Calibers)
+        {
+            if (caliberFactor[cal.label] <= 0f || !found.TryGetValue(Key(cal.weapon), out var gun))
+                continue;
+            var caliber = Caliber(gun);
+            if (caliber == null)
+                return false;
+            float before = caliber.baseDamage;
+            caliber.baseDamage = reference9 * caliberFactor[cal.label];
+            Logger.LogInfo("Caliber " + cal.label + " (" + gun.name + "): base damage " + before + " -> " + caliber.baseDamage + ", 9mm is " + reference9 + ".");
+        }
+        return true;
     }
 
     void Apply(string type, (string name, float inches)[] weapons, Dictionary<string, WeaponSO> found)

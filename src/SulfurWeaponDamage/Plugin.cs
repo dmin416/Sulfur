@@ -100,13 +100,13 @@ public class Plugin : BaseUnityPlugin
         return CurvePoints[CurvePoints.Length - 1].damage;
     }
 
-    // Caliber damage relative to 9mm, in direct proportion to muzzle energy (9mm about 550 J). The
+    // Caliber damage relative to 9mm, rounded from muzzle energy (9mm about 550 J), so 60, 180, 360 and 1800. The
     // weapon is any one gun known to fire that caliber. 9mm is the reference and stays as it is.
     static readonly (string label, string weapon, float factor)[] Calibers =
     {
-        ("556", "Gravekeeper", 3.09f),   // about 1700 J
-        ("762", "Salamander", 6.18f),    // about 3400 J
-        ("50BMG", "Ferryman", 30.9f),    // about 17000 J
+        ("556", "Gravekeeper", 3f),   // about 1700 J
+        ("762", "Salamander", 6f),    // about 3400 J
+        ("50BMG", "Ferryman", 30f),    // about 17000 J
     };
     const string NineMmWeapon = "Socom 9";
 

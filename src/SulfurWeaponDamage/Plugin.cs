@@ -22,6 +22,20 @@ public class Plugin : BaseUnityPlugin
         {
             "Snut .38", "Palehorse Topclipper", ".357 Balthazar", "Wyatt PULSAR", "Blackwater", "Death's Toll",
         }),
+        ("SMGs", new[]
+        {
+            "Drifter 9", "Vrede", "Ploika Compact", "Ferryman", "M3 Termite", "Deathstar PG", "Valet",
+            "Songbird", "Chimera Rapid", "Ripox Mowlock",
+        }),
+        ("AssaultRifles", new[]
+        {
+            "Corpsemaker", "Catacoil Rapid X", "Type 80 Typhoon", "M11A2 Fisk", "Wingman", "Socom ACR",
+            "CYB47", "Nightlily 318",
+        }),
+        ("LMGs", new[]
+        {
+            "Rektor 100rd", "Duhar", "Neuraxis F22", "Warpig", "Chat-Pardeur 98",
+        }),
     };
 
     readonly Dictionary<string, float> multipliers = new Dictionary<string, float>();

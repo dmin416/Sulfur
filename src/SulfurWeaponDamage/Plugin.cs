@@ -36,6 +36,14 @@ public class Plugin : BaseUnityPlugin
         {
             "Rektor 100rd", "Duhar", "Neuraxis F22", "Warpig", "Chat-Pardeur 98",
         }),
+        ("Rifles", new[]
+        {
+            "Knop .22", "M182 Pierre-Fusil", "Tailor Marksman MKII", "Farsight",
+        }),
+        ("Snipers", new[]
+        {
+            "Rokua .308", "Dolphin 99", "D4RT", "Impala Gravita", "Longboy",
+        }),
     };
 
     readonly Dictionary<string, float> multipliers = new Dictionary<string, float>();

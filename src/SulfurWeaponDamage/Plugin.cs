@@ -10,8 +10,8 @@ namespace SulfurMods.WeaponDamage;
 public class Plugin : BaseUnityPlugin
 {
     // Weapon type, then each weapon with the barrel length in inches of its real analogue. The
-    // shortest barrel in a type is the baseline and keeps its existing damage. Every other weapon
-    // in the type is scaled up along the barrel curve from that baseline.
+    // shortest barrel in a type is the baseline and keeps its multiplier. Every other weapon in the
+    // type has its own multiplier scaled up along the barrel curve. Caliber damage is never touched.
     static readonly (string type, (string name, float inches)[] weapons)[] Table =
     {
         ("Pistols", new (string, float)[]
@@ -111,12 +111,6 @@ public class Plugin : BaseUnityPlugin
         return sb.ToString();
     }
 
-    static CaliberType Caliber(WeaponSO weapon)
-    {
-        try { return weapon.caliber.GetAsset(); }
-        catch { return null; }
-    }
-
     private void Awake()
     {
         foreach (var row in Table)
@@ -149,18 +143,9 @@ public class Plugin : BaseUnityPlugin
                 continue;
             found[Key(weapon.name.StartsWith("Weapon_") ? weapon.name.Substring(7) : weapon.name)] = weapon;
         }
-        foreach (var row in Table)
-            foreach (var entry in row.weapons)
-                if (found.TryGetValue(Key(entry.name), out var probe) && Caliber(probe) == null)
-                    return;
         applied = true;
         foreach (var row in Table)
             Apply(row.type, row.weapons, found);
-    }
-
-    static float PerProjectile(WeaponSO weapon, CaliberType caliber)
-    {
-        return caliber.baseDamage * weapon.weaponType.GetDamageMultiplier();
     }
 
     void Apply(string type, (string name, float inches)[] weapons, Dictionary<string, WeaponSO> found)
@@ -174,11 +159,8 @@ public class Plugin : BaseUnityPlugin
             Logger.LogWarning(type + ": no weapons matched.");
             return;
         }
-        var baseWeapon = found[Key(weapons[baseIndex].name)];
-        var baseCaliber = Caliber(baseWeapon);
-        float baseline = PerProjectile(baseWeapon, baseCaliber) * baseWeapon.damageMultiplier;
         float baseCurve = Curve(weapons[baseIndex].inches);
-        Logger.LogInfo(type + ": baseline " + baseWeapon.name + " at " + baseline + " per projectile.");
+        Logger.LogInfo(type + ": baseline " + found[Key(weapons[baseIndex].name)].name + " keeps its multiplier.");
         foreach (var entry in weapons)
         {
             if (!found.TryGetValue(Key(entry.name), out var weapon))
@@ -186,17 +168,9 @@ public class Plugin : BaseUnityPlugin
                 Logger.LogWarning("No weapon matched '" + entry.name + "'. Check the item name in the item database.");
                 continue;
             }
-            var caliber = Caliber(weapon);
-            float perProjectile = PerProjectile(weapon, caliber);
-            if (weapon.overrideDamage != 0f || perProjectile <= 0f)
-            {
-                Logger.LogWarning(weapon.name + " has an override or no caliber damage, skipped.");
-                continue;
-            }
-            float target = baseline * Curve(entry.inches) / baseCurve * userFactor[Key(entry.name)];
             float before = weapon.damageMultiplier;
-            weapon.damageMultiplier = target / perProjectile;
-            Logger.LogInfo(weapon.name + ": " + entry.inches + " in, multiplier " + before + " -> " + weapon.damageMultiplier + " = " + target + " per projectile.");
+            weapon.damageMultiplier = before * Curve(entry.inches) / baseCurve * userFactor[Key(entry.name)];
+            Logger.LogInfo(weapon.name + ": " + entry.inches + " in, multiplier " + before + " -> " + weapon.damageMultiplier + ".");
         }
     }
 }

@@ -1,8 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Reflection;
-using System.Text;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
@@ -10,193 +9,228 @@ using HarmonyLib;
 using PerfectRandom.Sulfur.Core;
 using PerfectRandom.Sulfur.Core.Items;
 using PerfectRandom.Sulfur.Core.Stats;
+using PerfectRandom.Sulfur.Core.UI.ItemDescription;
 using PerfectRandom.Sulfur.Core.Units;
 using UnityEngine;
 
-namespace SulfurMods.CalorieBalance;
-
-[BepInPlugin("sulfur.mods.caloriebalance", "Sulfur Calorie Balance", "1.0.0")]
-public class Plugin : BaseUnityPlugin
+namespace SulfurCalorieBalance
 {
-    internal static ConfigEntry<float> HealthMultiplier;
-    internal static ConfigEntry<float> KcalPerCell;
-    internal static ConfigEntry<float> HpPerKcal;
-    internal static Plugin Instance;
-
-    private bool applied;
-
-    private void Awake()
+    /// <summary>
+    /// Balance overhaul, two parts:
+    ///  1) Player health: vanilla player Stat_MaxHealth is 100 while even a
+    ///     goblin has 120-200 and bosses 8,000-30,000. The Player UnitSO base
+    ///     MaxHealth is scaled (default x10 -> 1000). Enemies are untouched.
+    ///  2) Food healing: vanilla healing totals are effectively arbitrary
+    ///     (Seaweed 5 HP, Surstromming 50 HP for 50s, a whole Pizza 250 HP
+    ///     against a 100 HP cap). Every consumable's HealthRegen total is
+    ///     re-derived from an approximate real-world calorie value:
+    ///         heal HP = kcal * HpPerCalorie      (default 0.5, i.e. 2 kcal = 1 HP)
+    ///     A banana (~105 kcal) heals ~52 HP, a cheeseburger (~550) ~275 HP,
+    ///     a whole pizza (~2200) ~1100 HP (capped by the 1000 HP bar).
+    ///     Non-food medicine (First Aid Kit, Health Potion) is not calorie
+    ///     based: it keeps its vanilla share of the health bar, scaled by the
+    ///     same health multiplier (80 HP potion -> 800 HP at x10).
+    /// Healing duration is unchanged, so HP/second scales with the total.
+    /// All numbers are config-editable; per-item calories can be overridden
+    /// with a calories.csv placed next to this DLL or in BepInEx/config.
+    /// </summary>
+    [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
+    public class Plugin : BaseUnityPlugin
     {
-        Instance = this;
-        HealthMultiplier = Config.Bind("General", "HealthMultiplier", 10f, "Player max health is multiplied by this. Vanilla player health is 100.");
-        KcalPerCell = Config.Bind("General", "KcalPerCell", 200f, "Default calories for one inventory cell, used when calories.csv has no row for that food.");
-        HpPerKcal = Config.Bind("General", "HpPerKcal", 0.5f, "Healing granted per calorie. A full loaf and two snails of the same total size heal the same amount.");
-        Harmony.CreateAndPatchAll(typeof(Plugin).Assembly, "sulfur.mods.caloriebalance");
-        Logger.LogInfo("Calorie balance loaded. Foods are rewritten once the item database is ready.");
-    }
+        public const string PluginGuid = "sulfur.mods.calorie-balance";
+        public const string PluginName = "SULFUR Calorie Balance";
+        public const string PluginVersion = "1.0.0";
 
-    private void Update()
-    {
-        if (applied)
-            return;
-        var loading = StaticInstance<AsyncAssetLoading>.Instance;
-        if (loading == null || loading.itemDatabase == null)
-            return;
-        var items = loading.itemDatabase.GetRawList();
-        if (items == null || items.Count == 0)
-            return;
-        FoodTable.Apply(items, Logger);
-        applied = true;
-    }
-}
+        internal static ManualLogSource Log;
+        internal static ConfigEntry<float> PlayerHealthMultiplier;
+        internal static ConfigEntry<float> HpPerCalorie;
+        internal static ConfigEntry<float> MedicalHealMultiplier;
+        internal static ConfigEntry<bool> LogFoodChanges;
 
-static class HealthScale
-{
-    static readonly HashSet<int> ScaledAssets = new HashSet<int>();
-    static readonly HashSet<int> ScaledCurrent = new HashSet<int>();
+        internal static readonly Dictionary<string, float> Calories =
+            new Dictionary<string, float>(CalorieTable.Defaults);
 
-    internal static void ScaleAsset(UnitSO unit, Unit owner)
-    {
-        if (unit == null || owner == null || !owner.isPlayer)
-            return;
-        if (!ScaledAssets.Add(unit.GetInstanceID()))
-            return;
-        float mult = Plugin.HealthMultiplier.Value;
-        var list = unit.characterBaseAttributesNew;
-        for (int i = 0; i < list.Count; i++)
+        internal static readonly HashSet<string> MedicalItems = new HashSet<string>
         {
-            var attr = list[i];
-            if (attr.type != EntityAttributes.Stat_MaxHealth)
-                continue;
-            attr.value *= mult;
-            list[i] = attr;
+            "Item_FirstAidKit", "Item_HealthPotion"
+        };
+
+        private void Awake()
+        {
+            Log = Logger;
+            PlayerHealthMultiplier = Config.Bind("Player", "PlayerHealthMultiplier", 10f,
+                "Player base MaxHealth multiplier. Vanilla is 100 HP; 10 = 1000 HP. Enemies unaffected. Requires restart.");
+            HpPerCalorie = Config.Bind("Food", "HpPerCalorie", 0.5f,
+                "HP healed per kcal of food. 0.5 = a 500 kcal meal heals 250 HP (25% of the 1000 HP bar).");
+            MedicalHealMultiplier = Config.Bind("Food", "MedicalHealMultiplier", 10f,
+                "First Aid Kit / Health Potion keep their vanilla fraction of the bar, scaled by this (default same as health multiplier).");
+            LogFoodChanges = Config.Bind("Food", "LogFoodChanges", true,
+                "Log each consumable's kcal and new heal total the first time it is seen.");
+
+            LoadCalorieOverrides();
+            new Harmony(PluginGuid).PatchAll(typeof(Plugin).Assembly);
+            Log.LogInfo($"Calorie Balance active: player MaxHealth x{PlayerHealthMultiplier.Value} " +
+                        $"(100 -> {100f * PlayerHealthMultiplier.Value:0} HP), food heals {HpPerCalorie.Value} HP/kcal, " +
+                        $"{Calories.Count} calorie entries.");
+        }
+
+        private void LoadCalorieOverrides()
+        {
+            string[] candidates =
+            {
+                Path.Combine(Path.GetDirectoryName(Info.Location) ?? string.Empty, "calories.csv"),
+                Path.Combine(Paths.ConfigPath, "sulfur.calorie-balance.calories.csv")
+            };
+            foreach (string path in candidates)
+            {
+                try
+                {
+                    if (!File.Exists(path)) continue;
+                    int loaded = 0;
+                    foreach (string line in File.ReadAllLines(path))
+                    {
+                        if (string.IsNullOrWhiteSpace(line) || line.StartsWith("ItemAsset")) continue;
+                        string[] parts = line.Split(',');
+                        if (parts.Length < 3) continue;
+                        if (float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float kcal))
+                        {
+                            Calories[parts[0].Trim()] = kcal;
+                            loaded++;
+                        }
+                    }
+                    Log.LogInfo($"Loaded {loaded} calorie overrides from {path}");
+                }
+                catch (Exception ex)
+                {
+                    Log.LogWarning($"Could not read calorie overrides from {path}: {ex.Message}");
+                }
+            }
+        }
+
+        private static readonly HashSet<int> RewrittenItems = new HashSet<int>();
+
+        /// <summary>Re-derive an item's HealthRegen heal total from calories (idempotent).</summary>
+        internal static void RewriteFood(ItemDefinition item)
+        {
+            if (item == null || item.buffsOnConsume == null) return;
+            if (!RewrittenItems.Add(item.GetInstanceID())) return;
+
+            foreach (BuffDefinition buff in item.buffsOnConsume)
+            {
+                if (buff == null || buff.attributeId != EntityAttributes.Stat_HealthRegen) continue;
+                if (buff.duration <= 0f) continue;
+
+                float vanillaTotal = buff.totalValueOverride != 0f
+                    ? buff.totalValueOverride
+                    : buff.value * buff.duration;
+
+                float newTotal;
+                string basis;
+                if (MedicalItems.Contains(item.name))
+                {
+                    newTotal = vanillaTotal * MedicalHealMultiplier.Value;
+                    basis = $"medical, vanilla {vanillaTotal:0} x{MedicalHealMultiplier.Value}";
+                }
+                else if (Calories.TryGetValue(item.name, out float kcal))
+                {
+                    newTotal = kcal * HpPerCalorie.Value;
+                    basis = $"{kcal:0} kcal x{HpPerCalorie.Value} HP/kcal";
+                }
+                else
+                {
+                    // Unknown (e.g. future game update): keep vanilla share of the bigger bar.
+                    newTotal = vanillaTotal * PlayerHealthMultiplier.Value;
+                    basis = $"no calorie entry, vanilla {vanillaTotal:0} x{PlayerHealthMultiplier.Value}";
+                }
+
+                buff.totalValueOverride = newTotal;
+                buff.value = newTotal / buff.duration;
+                if (LogFoodChanges.Value)
+                    Log.LogInfo($"{item.name} ({item.displayName}): heals {newTotal:0} HP over {buff.duration:0.#}s [{basis}; vanilla {vanillaTotal:0} HP]");
+            }
         }
     }
 
-    internal static void ScaleCurrent(Unit owner)
+    /// <summary>Scale the Player UnitSO's base MaxHealth exactly once per session.</summary>
+    [HarmonyPatch(typeof(EntityStats), nameof(EntityStats.SetBaseAttributes))]
+    internal static class PlayerHealthPatch
     {
-        if (owner == null || !owner.isPlayer || owner.Stats == null)
-            return;
-        if (!ScaledCurrent.Add(owner.GetInstanceID()))
-            return;
-        if (!owner.Stats.TryGetAttribute(EntityAttributes.Status_CurrentHealth, out float hp))
-            return;
-        if (hp > 0f && hp <= 100.5f)
-            owner.Stats.SetStatus(EntityAttributes.Status_CurrentHealth, hp * Plugin.HealthMultiplier.Value, false);
-    }
+        private static readonly HashSet<int> ScaledAssets = new HashSet<int>();
 
-    internal static void FillToMax()
-    {
-        var player = StaticInstance<GameManager>.Instance != null ? StaticInstance<GameManager>.Instance.PlayerUnit : null;
-        if (player == null || player.Stats == null)
-            return;
-        if (player.Stats.TryGetAttribute(EntityAttributes.Stat_MaxHealth, out float max) && max > 0f)
-            player.Stats.SetStatus(EntityAttributes.Status_CurrentHealth, max, false);
-    }
-}
-
-[HarmonyPatch(typeof(EntityStats), nameof(EntityStats.SetBaseAttributes))]
-static class SetBaseAttributesPatch
-{
-    static void Prefix(UnitSO unit, Unit owner) => HealthScale.ScaleAsset(unit, owner);
-    static void Postfix(Unit owner) => HealthScale.ScaleCurrent(owner);
-}
-
-[HarmonyPatch(typeof(FloatingCardManager), nameof(FloatingCardManager.RemovePlayerModifiers))]
-static class CardResetPatch
-{
-    static void Postfix() => HealthScale.FillToMax();
-}
-
-static class FoodTable
-{
-    internal static void Apply(List<ItemDefinition> items, ManualLogSource log)
-    {
-        string path = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "", "calories.csv");
-        var saved = ReadCsv(path);
-        var rows = new List<string>();
-        int foods = 0;
-        foreach (var item in items)
+        private static void Prefix(UnitSO unit, Unit owner)
         {
-            if (item == null || item.buffsOnConsume == null)
-                continue;
-            int healBuffs = 0;
-            foreach (var buff in item.buffsOnConsume)
-            {
-                if (buff != null && buff.attributeId == EntityAttributes.Stat_HealthRegen)
-                    healBuffs++;
-            }
-            if (healBuffs == 0)
-                continue;
+            if (unit == null || owner == null || !owner.isPlayer) return;
+            if (!ScaledAssets.Add(unit.GetInstanceID())) return;
 
-            if (item.id == ItemIds.Item_FirstAidKit || item.id == ItemIds.Item_HealthPotion)
+            List<AttributeContainerNew> attrs = unit.characterBaseAttributesNew;
+            if (attrs == null) return;
+            for (int i = 0; i < attrs.Count; i++)
             {
-                ScaleMedicine(item, log);
-                continue;
+                AttributeContainerNew entry = attrs[i];
+                if (entry.type != EntityAttributes.Stat_MaxHealth) continue;
+                float vanilla = entry.value;
+                entry.value = vanilla * Plugin.PlayerHealthMultiplier.Value;
+                attrs[i] = entry;
+                Plugin.Log.LogInfo($"Player MaxHealth: {vanilla:0} -> {entry.value:0} HP (x{Plugin.PlayerHealthMultiplier.Value}). Enemies unchanged.");
             }
-
-            int cells = Mathf.Max(1, item.inventorySize.x * item.inventorySize.y);
-            float kcal = saved.TryGetValue(item.name, out float fromFile)
-                ? fromFile
-                : cells * Plugin.KcalPerCell.Value;
-            float heal = kcal * Plugin.HpPerKcal.Value;
-            float each = heal / healBuffs;
-            foreach (var buff in item.buffsOnConsume)
-            {
-                if (buff == null || buff.attributeId != EntityAttributes.Stat_HealthRegen)
-                    continue;
-                if (buff.duration <= 0f)
-                    buff.duration = 1f;
-                buff.totalValueOverride = each;
-            }
-            rows.Add(string.Format(CultureInfo.InvariantCulture, "{0},{1},{2}", item.name, cells, kcal));
-            foods++;
-        }
-        rows.Sort(System.StringComparer.Ordinal);
-        var builder = new StringBuilder();
-        builder.AppendLine("name,cells,kcal");
-        foreach (var row in rows)
-            builder.AppendLine(row);
-        File.WriteAllText(path, builder.ToString());
-        log.LogInfo("Rewrote " + foods + " foods. Edit calories.csv beside the plugin and restart to change them.");
-    }
-
-    static void ScaleMedicine(ItemDefinition item, ManualLogSource log)
-    {
-        float mult = Plugin.HealthMultiplier.Value;
-        foreach (var buff in item.buffsOnConsume)
-        {
-            if (buff == null || buff.attributeId != EntityAttributes.Stat_HealthRegen)
-                continue;
-            float before = buff.totalValueOverride != 0f ? buff.totalValueOverride : buff.value;
-            if (Mathf.Abs(before) < 2f)
-            {
-                log.LogInfo(item.name + " heal " + before + " looks like a fraction of the bar, left alone so it scales with max health.");
-                continue;
-            }
-            if (buff.totalValueOverride != 0f)
-                buff.totalValueOverride *= mult;
-            else
-                buff.value *= mult;
-            log.LogInfo(item.name + " heal " + before + " scaled to " + (buff.totalValueOverride != 0f ? buff.totalValueOverride : buff.value) + ".");
         }
     }
 
-    static Dictionary<string, float> ReadCsv(string path)
+    /// <summary>Apply calorie healing when an item is actually consumed.</summary>
+    [HarmonyPatch(typeof(Unit), nameof(Unit.ConsumeItem), typeof(ItemDefinition))]
+    internal static class ConsumeItemPatch
     {
-        var map = new Dictionary<string, float>();
-        if (!File.Exists(path))
-            return map;
-        foreach (var raw in File.ReadAllLines(path))
+        private static void Prefix(ItemDefinition item) { Plugin.RewriteFood(item); }
+    }
+
+    /// <summary>Make the hover preview show the calorie-based total.</summary>
+    [HarmonyPatch(typeof(Player), nameof(Player.SetHoveredConsumable))]
+    internal static class HoverPreviewPatch
+    {
+        private static void Prefix(ItemDefinition item) { Plugin.RewriteFood(item); }
+    }
+
+    /// <summary>Make inventory tooltips show the calorie-based total.</summary>
+    [HarmonyPatch(typeof(ItemDescription), nameof(ItemDescription.Setup), typeof(ItemDefinition))]
+    internal static class ItemDescriptionItemPatch
+    {
+        private static void Prefix(ItemDefinition item) { Plugin.RewriteFood(item); }
+    }
+
+    [HarmonyPatch(typeof(ItemDescription), nameof(ItemDescription.Setup), typeof(InventoryItem))]
+    internal static class ItemDescriptionInventoryPatch
+    {
+        private static void Prefix(InventoryItem inventoryItem)
         {
-            if (string.IsNullOrWhiteSpace(raw) || raw.StartsWith("name"))
-                continue;
-            var parts = raw.Split(',');
-            if (parts.Length < 3)
-                continue;
-            if (float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float kcal))
-                map[parts[0].Trim()] = kcal;
+            if (inventoryItem != null) Plugin.RewriteFood(inventoryItem.itemDefinition);
         }
-        return map;
+    }
+
+    /// <summary>
+    /// FloatingCardManager.RemovePlayerModifiers hardcodes CurrentHealth = 100
+    /// (vanilla full HP). After the x10 health change that would leave the
+    /// player at 100/1000; restore to the (new) full bar instead.
+    /// </summary>
+    [HarmonyPatch(typeof(FloatingCardManager), nameof(FloatingCardManager.RemovePlayerModifiers))]
+    internal static class RemovePlayerModifiersPatch
+    {
+        private static void Postfix()
+        {
+            try
+            {
+                Unit player = StaticInstance<GameManager>.Instance != null
+                    ? StaticInstance<GameManager>.Instance.PlayerUnit
+                    : null;
+                if (player != null && player.Stats != null)
+                {
+                    player.Stats.SetStatus(EntityAttributes.Status_CurrentHealth,
+                        player.Stats.GetAttribute(EntityAttributes.Stat_MaxHealth));
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.LogWarning($"RemovePlayerModifiers fix failed: {ex.Message}");
+            }
+        }
     }
 }

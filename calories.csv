@@ -1,0 +1,185 @@
+ItemAsset,DisplayName,CaloriesKcal,VanillaHealHP,NewHealHP_at_0.5HpPerKcal,Kind,EstimateSource
+Item_Seaweed,Seaweed,10,5.0,5.0,food,manual
+Item_VelvetBell,Velvet Bell,20,1.0,10.0,food,manual
+Item_MatchaGum,Green Tea Gum,5,10.0,2.5,food,manual
+Item_Worm,Earthworm,5,5.0,2.5,food,manual
+Item_KarlOskar,Karl-Oskar,150,5.0,75.0,food,manual
+Item_BlackPepper,Black Pepper,2,1.0,1.0,food,manual
+Item_BarkBread,Bark bread,180,10.0,90.0,food,manual
+Item_CactusSweets,Lackerol Cactus,60,10.0,30.0,food,manual
+Item_Sugar,Sugar,120,10.0,60.0,food,manual
+Item_MilkButtermilk,Buttermilk,200,15.0,100.0,food,manual
+Item_Cactus,Cactus,40,3.0,20.0,food,manual
+Item_Cacao,Cacao,120,5.0,60.0,food,manual
+Item_Pilk,Pilk,300,60.0,150.0,food,manual
+Item_Salt,Salt,0,1.0,0.0,food,manual
+Item_ChristmasSpice,Christmas Spice,5,1.0,2.5,food,manual
+Item_Solution,Solution,0,2.5,0.0,food,manual
+Item_Herb,Herbs,5,3.0,2.5,food,manual
+Item_FrogLeg,Frog Leg,80,3.0,40.0,food,manual
+Item_KidneyStone,Kidney Stone,0,5.0,0.0,food,manual
+Item_Flour,Flour,350,5.0,175.0,food,manual
+Item_Potato,Potato,160,5.0,80.0,food,manual
+Item_Rodsopp,Rödsopp,25,5.0,12.5,food,manual
+Item_MilkBlue,Skimmed Milk,170,10.0,85.0,food,manual
+Item_MatchaTeaCup,Green Tea,30,10.0,15.0,food,manual
+Item_HerbalTea,Herbal Tea,2,10.0,1.0,food,manual
+Item_Rice,Rice,360,5.0,180.0,food,manual
+Item_MycotaSquamata,Mycota Squamata,25,5.0,12.5,food,manual
+Item_BottledWater,Bottled Water,0,5.0,0.0,food,manual
+Item_Walnut,Walnut,60,5.0,30.0,food,manual
+Item_Spagetti,Spaghetti,400,5.0,200.0,food,manual
+Item_MatchaTeaPowder,Matcha,30,5.0,15.0,food,manual
+Item_PineNut,Pine nuts,90,5.0,45.0,food,manual
+Item_Peanut,Peanut,90,5.0,45.0,food,manual
+Item_Surstromming,Surstromming,180,50.0,90.0,food,manual
+Item_MilkGreen,Low Fat Milk,230,15.0,115.0,food,manual
+Item_MilkRed,Whole Milk,320,20.0,160.0,food,manual
+Item_Jello,Jello,80,15.0,40.0,food,manual
+Item_Jam,Berry Jam,200,15.0,100.0,food,manual
+Item_BananaSulfs,Banana Sulfs,120,20.0,60.0,food,manual
+Item_ChocolateBar,Chocolate Bar,250,25.0,125.0,food,manual
+Item_RhubarbSauce,Rhubarb Sauce,90,20.0,45.0,food,manual
+Item_Nuggets,Nuggets,280,25.0,140.0,food,manual
+Item_Cevapi,Cevapi,450,25.0,225.0,food,manual
+Item_ChickenNashvilleHot,Nashville Hot Chicken,550,25.0,275.0,food,manual
+Item_CheeseTops,Cheese Tops,220,25.0,110.0,food,manual
+Item_Wine,Red Wine,210,30.0,105.0,food,manual
+Item_Unagi,Unagi,350,60.0,175.0,food,manual
+Item_HotSnax,Hot Snacks,220,15.0,110.0,food,manual
+Item_TongueOnStick,Tongue On Stick,180,20.0,90.0,food,manual
+Item_MeatSkewers,Meat Skewers,320,20.0,160.0,food,manual
+Item_Lussekatt,Lussekatt,250,30.0,125.0,food,manual
+Item_SausageOnStick,Sausage On Stick,300,40.0,150.0,food,manual
+Item_Marshmallow,Marshmallows,180,40.0,90.0,food,manual
+Item_JamUnsweetened,Berry Jam (Unsweetened),120,10.0,60.0,food,manual
+Item_VacuumCleaner,Vacuum Cleaner,180,15.0,90.0,food,manual
+Item_SwedishPancakes,Swedish Pancakes,450,30.0,225.0,food,manual
+Item_MilkshakeChocolate,Chocolate Milkshake,450,35.0,225.0,food,manual
+Item_MilkshakeBerries,Berry Milkshake,400,35.0,200.0,food,manual
+Item_Mudcake,Chocolate Mudcake,400,50.0,200.0,food,manual
+Item_SausageSoup,Sausage Soup,350,30.0,175.0,food,manual
+Item_RamenTori,Tori Ramen,550,40.0,275.0,food,manual
+Item_Ramen,Ramen,500,40.0,250.0,food,manual
+Item_GrilledPoultry,Grilled Poultry,600,100.0,300.0,food,manual
+Item_PyttIPanna,Pyttipanna,650,25.0,325.0,food,manual
+Item_Poutine,Poutine,700,35.0,350.0,food,manual
+Item_Currywurst,Currywurst,600,45.0,300.0,food,manual
+Item_FishNChips,Fish and chips,850,50.0,425.0,food,manual
+Item_PastaBolognese,Spaghetti Bolognese,700,50.0,350.0,food,manual
+Item_CaviarTubed,Tube Caviar,120,30.0,60.0,food,manual
+Item_Cereal,Cereal,380,35.0,190.0,food,manual
+Item_BiscuitsAndGravy,Biscuiits and Gravy,600,25.0,300.0,food,manual
+Item_Cheeseburger,Cheeseburger,550,45.0,275.0,food,manual
+Item_Onigiri,Onigiri,180,35.0,90.0,food,manual
+Item_BobaTea,Boba Tea,350,15.0,175.0,food,manual
+Item_CactusDrink,Cactus Softdrink,140,15.0,70.0,food,manual
+Item_HotSauce,Hot Sauce,15,5.0,7.5,food,manual
+Item_Fondue,Fondue,800,50.0,400.0,food,manual
+Item_HotPot,Hot Pot,900,50.0,450.0,food,manual
+Item_Raclette,Raclette,700,50.0,350.0,food,manual
+Item_PizzaLarge,Pizza,2200,250.0,1100.0,food,manual
+Item_ButtermilkPancakes,Buttermilk Pancakes,500,30.0,250.0,food,manual
+Item_SpanishOmelette,Spanish Omelette,400,30.0,200.0,food,manual
+Item_HardshellTaco,Hardshell Taco,200,25.0,100.0,food,manual
+Item_BloodPudding,Blood Pudding,300,30.0,150.0,food,manual
+Item_CuissesDeGrenouille,Cuisses De Grenouille,200,35.0,100.0,food,manual
+Item_Escargot,Escargot,120,30.0,60.0,food,manual
+Item_KidneyPie,Kidney Pie,450,35.0,225.0,food,manual
+Item_SwingDing,Swing-Ding,150,5.0,75.0,food,manual
+Item_Cocktail,Cocktail,150,15.0,75.0,food,manual
+Item_Polsa,Pölsa,350,20.0,175.0,food,manual
+Item_CaviarBottle,Bottled Caviar,180,25.0,90.0,food,manual
+Item_MacNCheese,Mac'n'Cheese,600,30.0,300.0,food,manual
+Item_Blood,Blood,80,5.0,40.0,food,manual
+Item_Egg,Egg,70,5.0,35.0,food,manual
+Item_LiverDumpling,Dumpling,250,20.0,125.0,food,manual
+Item_Dimmie,Dimmie,120,20.0,60.0,food,manual
+Item_RiceCake,Puffed Rice Cakes,70,15.0,35.0,food,manual
+Item_Hazelnut,Hazelnut,90,2.0,45.0,food,manual
+Item_FirstAidKit,First Aid Kit,,100.0,,medical,scaled-vanilla
+Item_NutMix,Nut Mix,170,25.0,85.0,food,manual
+Item_Sausage,Spicy Sausage,300,30.0,150.0,food,manual
+Item_HealthPotion,Health Potion,,80.0,,medical,scaled-vanilla
+Item_Haggis,Haggis,450,20.0,225.0,food,manual
+Item_MushroomSoup,Mushroom Soup,200,20.0,100.0,food,manual
+Item_PotatoSalad,Potato Salad,350,15.0,175.0,food,manual
+Item_Aspic,Aspic,150,15.0,75.0,food,manual
+Item_CandyCane,Candy Cane,60,20.0,30.0,food,manual
+Item_Silltalrik,Silltallrik,400,20.0,200.0,food,manual
+Item_GravadLax,Gravad Lax,250,20.0,125.0,food,manual
+Item_Julmust,Julmust,140,18.0,70.0,food,manual
+Item_CottonCandy,Cotton Candy,110,20.0,55.0,food,manual
+Item_CordonBleu,Cordon Bleu,550,25.0,275.0,food,manual
+Item_RhubarbPie,Rhubarb Pie,350,30.0,175.0,food,manual
+Item_MulledWine,Mulled Wine,180,30.0,90.0,food,manual
+Item_Risgrynsgrot,Risgrynsgröt,300,18.0,150.0,food,manual
+Item_Risalamalta,Ris à la Malta,350,25.0,175.0,food,manual
+Item_Lutfisk,Lutfisk,200,25.0,100.0,food,manual
+Item_JanssonsTemptation,Jansson's Temptation,500,45.0,250.0,food,manual
+Item_DoubleCheeseburger,Double Cheeseburger,950,200.0,475.0,food,manual
+Item_PizzaSlice,Pizza Slice,285,50.0,142.5,food,manual
+Item_GumHubba,Sweet Gum,10,10.0,5.0,food,manual
+Item_Broth,Broth,30,10.0,15.0,food,manual
+Item_Oats,Oats,150,10.0,75.0,food,manual
+Item_Maki,Maki,300,30.0,150.0,food,manual
+Item_MashedPotatoes,Mashed Potatoes,250,30.0,125.0,food,manual
+Item_SausageOmelette,Sausage Omelette,450,42.0,225.0,food,manual
+Item_Porridge,Porridge,180,15.0,90.0,food,manual
+Item_Meringue,Meringue,80,15.0,40.0,food,manual
+Item_Curry,Curry,550,35.0,275.0,food,manual
+Item_MysteryMeat,Mystery Meat,300,15.0,150.0,food,manual
+Item_SandwichBuddy,Buddy Sandwich,400,15.0,200.0,food,manual
+Item_SandwichBread,Bread Sandwich,250,15.0,125.0,food,manual
+Item_SandwichButter,Butter Sandwich,300,15.0,150.0,food,manual
+Item_FrenchToast,French Toast,350,15.0,175.0,food,manual
+Item_ToastSkagen,Toast Skagen,350,15.0,175.0,food,manual
+Item_Omelette,Omelette,300,22.0,150.0,food,manual
+Item_DoppIGrytan,Dopp I Grytan,250,35.0,125.0,food,manual
+Item_ChocolateSyrup,Chocolate Syrup,100,10.0,50.0,food,manual
+Item_Berries,Berries,60,10.0,30.0,food,manual
+Item_Cheese,Cheese,220,15.0,110.0,food,manual
+Item_CactusGrilled,Grilled Cactus,60,20.0,30.0,food,manual
+Item_Gonster,Gonster,160,25.0,80.0,food,manual
+Item_PeanutButter,Peanut Butter,600,45.0,300.0,food,manual
+Item_PowerBar,Power Bar,250,10.0,125.0,food,manual
+Item_Fish,Fish,200,10.0,100.0,food,manual
+Item_SandFish,Flat Sandfish,150,10.0,75.0,food,manual
+Item_SandwichCheese,Cheese Sandwich,320,20.0,160.0,food,manual
+Item_SandwichLeverpastej,Liver Patty Sandwich,350,20.0,175.0,food,manual
+Item_Nigiri,Nigiri,250,20.0,125.0,food,manual
+Item_NutSpread,Nut Spread,400,40.0,200.0,food,manual
+Item_Americano,Americano,5,15.0,2.5,food,manual
+Item_Bread,Bread,200,15.0,100.0,food,manual
+Item_Stout,Stout,180,15.0,90.0,food,manual
+Item_ChocolateBall,Chocolate Ball,140,20.0,70.0,food,manual
+Item_Coffee,Coffee,5,20.0,2.5,food,manual
+Item_Beans,Beans,250,25.0,125.0,food,manual
+Item_Latte,Latte,120,30.0,60.0,food,manual
+Item_Cappuccino,Cappuccino,80,35.0,40.0,food,manual
+Item_Rhubarb,Rhubarb,20,6.0,10.0,food,manual
+Item_HardBread,Hard Bread,150,8.0,75.0,food,manual
+Item_Polse,Pølse,350,15.0,175.0,food,manual
+Item_MushroomSkewer,Mushroom Skewer,80,15.0,40.0,food,manual
+Item_Kombucha,Kombucha,40,15.0,20.0,food,manual
+Item_Stew,Stew,450,20.0,225.0,food,manual
+Item_MushroomFried,Fried Mushroom ,120,15.0,60.0,food,manual
+Item_MushroomOmelette,Mushroom Omelette,320,20.0,160.0,food,manual
+Item_SaltedSandfish,Salted Sandfish,180,25.0,90.0,food,manual
+Item_SulfCola,SulfCola,210,30.0,105.0,food,manual
+Item_Leverpastej,Leverpastej,300,20.0,150.0,food,manual
+Item_SandwichNutSpread,Nut Spread Sandwich,400,20.0,200.0,food,manual
+Item_Mochi,Mochi,120,25.0,60.0,food,manual
+Item_SandwichPeanutbutter,Peanutbutter Sandwich,450,25.0,225.0,food,manual
+Item_EggToddy,Egg Toddy,180,10.0,90.0,food,manual
+Item_SandwichPeanutbutterJelly,Peanutbutter Jelly Sandwich,480,35.0,240.0,food,manual
+Item_Banana,Banana,105,10.0,52.5,food,manual
+Item_Butter,Butter,100,15.0,50.0,food,manual
+Item_Gravy,Gravy,80,20.0,40.0,food,manual
+Item_Sashimi,Sashimi,200,40.0,100.0,food,manual
+Item_BeefJerky,Beef Jerky,120,10.0,60.0,food,manual
+Item_FishSalted,Salted Fish,180,20.0,90.0,food,manual
+Item_FrenchHotdog,French Hotdog,350,30.0,175.0,food,manual
+Item_RhubarbPorridge,Rhubarb Porridge,180,25.0,90.0,food,manual
+Item_BananaBread,Banana Bread,350,30.0,175.0,food,manual
+Item_FullEnglishBreakfast,Full English Breakfast,800,35.0,400.0,food,manual

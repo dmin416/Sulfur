@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BepInEx;
 using BepInEx.Configuration;
+using BepInEx.Logging;
 using HarmonyLib;
 using PerfectRandom.Sulfur.Core;
 using PerfectRandom.Sulfur.Core.CharacterStats;
@@ -8,120 +9,128 @@ using PerfectRandom.Sulfur.Core.Items;
 using PerfectRandom.Sulfur.Core.Stats;
 using PerfectRandom.Sulfur.Core.UI.ItemDescription;
 
-namespace SulfurMods.BarrelRebalance;
-
-[BepInPlugin("sulfur.mods.barrels", "Sulfur Barrel Rebalance", "1.0.0")]
-public class Plugin : BaseUnityPlugin
+namespace SulfurBarrelRebalance
 {
-    internal static ConfigEntry<float> Spread2;
-    internal static ConfigEntry<float> Damage2;
-    internal static ConfigEntry<float> Speed2;
-    internal static ConfigEntry<float> Spread4;
-    internal static ConfigEntry<float> Damage4;
-    internal static ConfigEntry<float> Speed4;
-    internal static ConfigEntry<float> SpreadShrouded;
-    internal static ConfigEntry<float> DamageShrouded;
-    internal static ConfigEntry<float> SpeedShrouded;
-    internal static ConfigEntry<float> DurabilityShrouded;
-    internal static ConfigEntry<float> Spread6;
-    internal static ConfigEntry<float> Damage6;
-    internal static ConfigEntry<float> Speed6;
-
-    static readonly Dictionary<ItemId, BarrelTier> Tiers = new Dictionary<ItemId, BarrelTier>();
-    static readonly HashSet<ItemDefinition> Rewritten = new HashSet<ItemDefinition>();
-
-    private void Awake()
+    /// <summary>
+    /// Rebalances barrel extensions into a clean tier ladder:
+    ///   2" Barrel Extension:        Spread -25%, Damage +20%, Projectile speed +20%
+    ///   4" Barrel Extension:        Spread -40%, Damage +40%, Projectile speed +40%
+    ///   Shrouded Barrel Extension:  Spread -30%, Damage +30%, Projectile speed +30%
+    ///                               and Max Durability +30%
+    ///   6" Barrel Extension:        Spread -60%, Damage +60%, Projectile speed +60%
+    /// Vanilla side effects that were not part of the spec are preserved by
+    /// carrying over any other original modifiers (the 2"/4"/6" movement
+    /// speed penalties of -5%/-10%/-20% while held, Shrouded's durability).
+    /// The Improvised Barrel Extension is left exactly as vanilla.
+    ///
+    /// Implemented by rewriting the attachment's modifiersOnAttachToItem the
+    /// first time it is attached or its tooltip is shown. Damage is a
+    /// PercentAdd modifier on the weapon's Damage stat (base = caliber
+    /// damage), projectile speed is a Flat addition to ProjectileTimeScale
+    /// (base 1.0, same style as vanilla barrels), spread is PercentAdd.
+    /// Safe for existing saves: modifier removal is by source id, not value.
+    /// Percentages are configurable per tier.
+    /// </summary>
+    [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
+    public class Plugin : BaseUnityPlugin
     {
-        Spread2 = Bind("Barrel2", "Spread", 25f);
-        Damage2 = Bind("Barrel2", "Damage", 20f);
-        Speed2 = Bind("Barrel2", "Speed", 20f);
-        Spread4 = Bind("Barrel4", "Spread", 40f);
-        Damage4 = Bind("Barrel4", "Damage", 40f);
-        Speed4 = Bind("Barrel4", "Speed", 40f);
-        SpreadShrouded = Bind("Shrouded", "Spread", 30f);
-        DamageShrouded = Bind("Shrouded", "Damage", 30f);
-        SpeedShrouded = Bind("Shrouded", "Speed", 30f);
-        DurabilityShrouded = Bind("Shrouded", "Durability", 30f);
-        Spread6 = Bind("Barrel6", "Spread", 60f);
-        Damage6 = Bind("Barrel6", "Damage", 60f);
-        Speed6 = Bind("Barrel6", "Speed", 60f);
+        public const string PluginGuid = "sulfur.mods.barrel-rebalance";
+        public const string PluginName = "SULFUR Barrel Rebalance";
+        public const string PluginVersion = "1.0.0";
 
-        Tiers[ItemIds.Attachment_BarrelExtension2i] = BarrelTier.Two;
-        Tiers[ItemIds.Attachment_BarrelExtension4i] = BarrelTier.Four;
-        Tiers[ItemIds.Attachment_ShroudedBarrelExtension] = BarrelTier.Shrouded;
-        Tiers[ItemIds.Attachment_BarrelExtension6i] = BarrelTier.Six;
+        internal static ManualLogSource Log;
+        internal static ConfigEntry<float> Tier1Percent;
+        internal static ConfigEntry<float> Tier2Percent;
+        internal static ConfigEntry<float> Tier3Percent;
 
-        Harmony.CreateAndPatchAll(typeof(Plugin).Assembly, "sulfur.mods.barrels");
-        Logger.LogInfo("Barrel ladder loaded. Improvised barrels are left alone.");
-    }
-
-    ConfigEntry<float> Bind(string section, string key, float value)
-    {
-        return Config.Bind(section, key, value, "Percent. Spread is applied as a reduction. Speed is a flat addition to projectile time scale.");
-    }
-
-    internal static void Rewrite(ItemDefinition attachment)
-    {
-        if (attachment == null || !Tiers.TryGetValue(attachment.id, out var tier))
-            return;
-        if (!Rewritten.Add(attachment))
-            return;
-        if (attachment.modifiersOnAttachToItem == null)
-            attachment.modifiersOnAttachToItem = new List<ItemModifierContainer>();
-
-        var list = attachment.modifiersOnAttachToItem;
-        for (int i = list.Count - 1; i >= 0; i--)
+        private static readonly Dictionary<string, int> BarrelTiers = new Dictionary<string, int>
         {
-            var modifier = list[i];
-            if (modifier == null)
-                continue;
-            if (modifier.attribute == ItemAttributes.Spread
-                || modifier.attribute == ItemAttributes.Damage
-                || modifier.attribute == ItemAttributes.ProjectileTimeScale
-                || (tier == BarrelTier.Shrouded && modifier.attribute == ItemAttributes.MaxDurability))
-                list.RemoveAt(i);
+            { "Attachment_BarrelExtension2i", 1 },
+            { "Attachment_BarrelExtension4i", 2 },
+            { "Attachment_ShroudedBarrelExtension", 4 },
+            { "Attachment_BarrelExtension6i", 3 },
+        };
+
+        private static readonly HashSet<int> Rewritten = new HashSet<int>();
+
+        private void Awake()
+        {
+            Log = Logger;
+            Tier1Percent = Config.Bind("Barrels", "Tier1Percent_2inch", 20f,
+                "2-inch barrel: Damage +% and projectile speed +%. Spread reduction is 25% (see Tier1SpreadPercent).");
+            Tier2Percent = Config.Bind("Barrels", "Tier2Percent_4inch", 40f,
+                "4-inch barrel: Damage +%, projectile speed +%, spread -%.");
+            ShroudedPercent = Config.Bind("Barrels", "ShroudedPercent", 30f,
+                "Shrouded barrel: Damage +%, projectile speed +%, spread -%.");
+            ShroudedDurabilityPercent = Config.Bind("Barrels", "ShroudedDurabilityPercent", 30f,
+                "Shrouded barrel: Max Durability +% (vanilla was +20%).");
+            Tier3Percent = Config.Bind("Barrels", "Tier3Percent_6inch", 60f,
+                "6-inch barrel: Damage +%, projectile speed +%, spread -%.");
+            Tier1SpreadPercent = Config.Bind("Barrels", "Tier1SpreadPercent_2inch", 25f,
+                "2-inch barrel spread reduction %.");
+            new Harmony(PluginGuid).PatchAll(typeof(Plugin).Assembly);
+            Log.LogInfo("Barrel Rebalance active: 2\" -25% spread/+20% dmg/+20% speed, 4\" -40%/+40%/+40%, Shrouded -30%/+30%/+30%, 6\" -60%/+60%/+60%.");
         }
 
-        float spread, damage, speed, durability;
-        switch (tier)
+        internal static ConfigEntry<float> Tier1SpreadPercent;
+        internal static ConfigEntry<float> ShroudedPercent;
+        internal static ConfigEntry<float> ShroudedDurabilityPercent;
+
+        internal static void Rewrite(ItemDefinition item)
         {
-            case BarrelTier.Two:
-                spread = Spread2.Value; damage = Damage2.Value; speed = Speed2.Value; durability = 0f;
-                break;
-            case BarrelTier.Four:
-                spread = Spread4.Value; damage = Damage4.Value; speed = Speed4.Value; durability = 0f;
-                break;
-            case BarrelTier.Shrouded:
-                spread = SpreadShrouded.Value; damage = DamageShrouded.Value; speed = SpeedShrouded.Value; durability = DurabilityShrouded.Value;
-                break;
-            default:
-                spread = Spread6.Value; damage = Damage6.Value; speed = Speed6.Value; durability = 0f;
-                break;
+            if (item == null || item.modifiersOnAttachToItem == null) return;
+            if (!BarrelTiers.TryGetValue(item.name, out int tier)) return;
+            if (!Rewritten.Add(item.GetInstanceID())) return;
+
+            float pct, spreadPct;
+            switch (tier)
+            {
+                case 1: pct = Tier1Percent.Value / 100f; spreadPct = Tier1SpreadPercent.Value / 100f; break;
+                case 2: pct = Tier2Percent.Value / 100f; spreadPct = pct; break;
+                case 4: pct = ShroudedPercent.Value / 100f; spreadPct = pct; break;
+                default: pct = Tier3Percent.Value / 100f; spreadPct = pct; break;
+            }
+
+            List<ItemModifierContainer> rewritten = new List<ItemModifierContainer>
+            {
+                new ItemModifierContainer { attribute = ItemAttributes.Spread, modType = StatModType.PercentAdd, value = -spreadPct },
+                new ItemModifierContainer { attribute = ItemAttributes.Damage, modType = StatModType.PercentAdd, value = pct },
+                new ItemModifierContainer { attribute = ItemAttributes.ProjectileTimeScale, modType = StatModType.Flat, value = pct },
+            };
+            // Preserve any other vanilla modifiers (move-speed penalties).
+            // Shrouded's durability bonus is overridden to the configured value.
+            foreach (ItemModifierContainer original in item.modifiersOnAttachToItem)
+            {
+                if (original.attribute == ItemAttributes.Spread ||
+                    original.attribute == ItemAttributes.Damage ||
+                    original.attribute == ItemAttributes.ProjectileTimeScale)
+                    continue;
+                if (tier == 4 && original.attribute == ItemAttributes.MaxDurability)
+                {
+                    rewritten.Add(new ItemModifierContainer
+                    {
+                        attribute = ItemAttributes.MaxDurability,
+                        modType = StatModType.PercentAdd,
+                        value = ShroudedDurabilityPercent.Value / 100f
+                    });
+                    continue;
+                }
+                rewritten.Add(original);
+            }
+            item.modifiersOnAttachToItem = rewritten;
+            Log.LogInfo($"{item.name}: Spread -{spreadPct * 100:0}%, Damage +{pct * 100:0}%, Projectile speed +{pct * 100:0}% (other vanilla modifiers kept).");
         }
-
-        list.Add(Make(ItemAttributes.Spread, StatModType.PercentAdd, -spread / 100f));
-        list.Add(Make(ItemAttributes.Damage, StatModType.PercentAdd, damage / 100f));
-        list.Add(Make(ItemAttributes.ProjectileTimeScale, StatModType.Flat, speed / 100f));
-        if (durability != 0f)
-            list.Add(Make(ItemAttributes.MaxDurability, StatModType.PercentAdd, durability / 100f));
     }
 
-    static ItemModifierContainer Make(ItemAttributes attribute, StatModType modType, float value)
+    [HarmonyPatch(typeof(InventoryItem), nameof(InventoryItem.AddAttachment))]
+    internal static class AddAttachmentPatch
     {
-        return new ItemModifierContainer { attribute = attribute, modType = modType, value = value };
+        private static void Prefix(ItemDefinition attachmentItem) { Plugin.Rewrite(attachmentItem); }
     }
 
-    enum BarrelTier { Two, Four, Shrouded, Six }
-}
-
-[HarmonyPatch(typeof(InventoryItem), nameof(InventoryItem.AddAttachment))]
-static class AddAttachmentPatch
-{
-    static void Prefix(ItemDefinition attachmentItem) => Plugin.Rewrite(attachmentItem);
-}
-
-[HarmonyPatch(typeof(ItemDescription), "AddAttachmentText")]
-static class TooltipPatch
-{
-    static void Prefix(ItemDefinition attachment) => Plugin.Rewrite(attachment);
+    [HarmonyPatch(typeof(ItemDescription), nameof(ItemDescription.Setup), typeof(ItemDefinition))]
+    internal static class ItemDescriptionPatch
+    {
+        private static void Prefix(ItemDefinition item) { Plugin.Rewrite(item); }
+    }
 }

@@ -1,233 +1,160 @@
+using System;
 using System.Collections.Generic;
 using BepInEx;
 using BepInEx.Configuration;
-using HarmonyLib;
+using BepInEx.Logging;
 using PerfectRandom.Sulfur.Core;
 using PerfectRandom.Sulfur.Core.Items;
 using PerfectRandom.Sulfur.Core.UI;
-using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace SulfurMods.DisassembleAnywhere;
-
-[BepInPlugin("sulfur.mods.disassemble", "Sulfur Disassemble Anywhere", "1.0.0")]
-public class Plugin : BaseUnityPlugin
+namespace SulfurDisassembleAnywhere
 {
-    internal static ConfigEntry<KeyCode> Key;
-    internal static ConfigEntry<int> Cost;
-    internal static ConfigEntry<bool> DestroyWeapon;
-    internal static Plugin Instance;
-
-    private void Awake()
+    /// <summary>
+    /// Disassemble (strip) weapons anywhere, no Workbench required.
+    ///
+    /// Vanilla only lets the Workbench detach ATTACHMENTS, for 10% of the
+    /// weapon price, at the station; oils/scrolls are permanent (the Baptismal
+    /// Font destroys enchantments with no refund).
+    ///
+    /// With the inventory open, hover (or gamepad-navigate to) one of your
+    /// weapons and press the disassemble key (default K):
+    ///  - every attachment is removed and returned to your backpack,
+    ///  - every enchantment is removed and the OIL or SCROLL item that applied
+    ///    it is returned to your backpack (EnchantmentDefinition remembers it
+    ///    via ItemThatAppliedThis),
+    ///  - the weapon itself stays in place, bare (default), or is also
+    ///    destroyed if DestroyWeaponAfterStrip is enabled.
+    /// If the backpack cannot fit everything, nothing is removed.
+    /// Only player-owned weapons can be stripped (shop/stash items are safe).
+    /// </summary>
+    [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
+    public class Plugin : BaseUnityPlugin
     {
-        Instance = this;
-        Key = Config.Bind("General", "Key", KeyCode.K, "Strip attachments and oils from the hovered item.");
-        Cost = Config.Bind("General", "Cost", 0, "Flat coin cost. Stash is spent first in a safe zone. 0 is free.");
-        DestroyWeapon = Config.Bind("General", "DestroyWeapon", false, "Destroy the weapon after it has been stripped. Default keeps the bare weapon.");
-        Logger.LogInfo("Disassemble anywhere loaded. Default key is K.");
-    }
+        public const string PluginGuid = "sulfur.mods.disassemble-anywhere";
+        public const string PluginName = "SULFUR Disassemble Anywhere";
+        public const string PluginVersion = "1.0.0";
 
-    private void Update()
-    {
-        if (!Keys.Down(Key.Value))
-            return;
-        var ui = StaticInstance<UIManager>.Instance;
-        if (ui == null || ui.InventoryUI == null)
-            return;
-        var item = ui.InventoryUI.hoveredOrNavigatedInventoryItem;
-        if (item == null || !item.OwnedByPlayer)
-            return;
+        internal static ManualLogSource Log;
+        private static ConfigEntry<string> KeyConfig;
+        private static ConfigEntry<bool> DestroyWeapon;
+        private static ConfigEntry<int> FlatCost;
+        private static Key _key = Key.K;
 
-        var returns = new List<ItemDefinition>();
-        if (item.attachments != null)
+        private void Awake()
         {
-            foreach (var attachment in item.attachments)
+            Log = Logger;
+            KeyConfig = Config.Bind("Disassemble", "DisassembleKey", "K",
+                "Unity InputSystem Key name pressed while hovering a weapon in the inventory to disassemble it.");
+            DestroyWeapon = Config.Bind("Disassemble", "DestroyWeaponAfterStrip", false,
+                "Also destroy the weapon itself after its attachments/oils/scrolls are recovered. Default false: the bare weapon is kept.");
+            FlatCost = Config.Bind("Disassemble", "FlatCostCoins", 0,
+                "Coins charged per disassembly. 0 = free (vanilla Workbench charges 10% of weapon price for attachments only).");
+            if (!Enum.TryParse(KeyConfig.Value, true, out _key))
             {
-                if (attachment != null)
-                    returns.Add(attachment);
+                Log.LogWarning($"Unknown key '{KeyConfig.Value}', falling back to K.");
+                _key = Key.K;
+            }
+            Log.LogInfo($"Disassemble Anywhere active: hover a weapon and press {_key}.");
+        }
+
+        private void Update()
+        {
+            try
+            {
+                if (Keyboard.current == null || !_keyWasPressed()) return;
+                TryDisassembleHovered();
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning($"Disassemble failed: {ex.Message}");
             }
         }
-        int oils = 0;
-        int missingOils = 0;
-        if (item.enchantments != null)
+
+        private static bool _keyWasPressed()
         {
-            foreach (var enchantment in item.enchantments)
-            {
-                if (enchantment == null)
-                    continue;
-                if (enchantment.ItemThatAppliedThis != null)
-                {
-                    returns.Add(enchantment.ItemThatAppliedThis);
-                    oils++;
-                }
-                else
-                    missingOils++;
-            }
-        }
-        if (returns.Count == 0 && (item.enchantments == null || item.enchantments.Count == 0))
-        {
-            Alerts.ShowOnce("Nothing to strip.");
-            return;
+            return Keyboard.current[_key] != null && Keyboard.current[_key].wasPressedThisFrame;
         }
 
-        var player = StaticInstance<GameManager>.Instance.PlayerUnit;
-        int cost = Mathf.Max(0, Cost.Value);
-        if (cost > 0 && player.Stats.GetCoins(StaticInstance<GameManager>.Instance.InSafeZone) < cost)
+        private static void Alert(string text)
         {
-            Alerts.ShowOnce("Not enough coins.");
-            return;
+            if (StaticInstance<UIManager>.Instance != null)
+                StaticInstance<UIManager>.Instance.ShowSmallAlert(text);
+            Log.LogInfo(text);
         }
 
-        var pack = ui.InventoryUI.PlayerBackpackGrid;
-        var added = new List<InventoryItem>();
-        var before = new HashSet<InventoryItem>(pack.AllItems());
-        foreach (var def in returns)
+        private static void TryDisassembleHovered()
         {
-            if (!pack.AddItem(def, false, false, null))
+            if (StaticInstance<GameManager>.Instance == null || StaticInstance<UIManager>.Instance == null) return;
+            var inventoryUI = StaticInstance<UIManager>.Instance.InventoryUI;
+            if (inventoryUI == null || inventoryUI.draggingItem != null) return;
+
+            InventoryItem item = inventoryUI.hoveredOrNavigatedInventoryItem;
+            if (item == null || item.itemDefinition == null) return;
+            if (!item.OwnedByPlayer) return;
+            if (item.weaponDefinition == null) return; // weapons only
+
+            List<ItemDefinition> attachments = new List<ItemDefinition>(item.attachments);
+            List<EnchantmentDefinition> enchantments = new List<EnchantmentDefinition>(item.enchantments);
+            if (attachments.Count == 0 && enchantments.Count == 0)
             {
-                foreach (var spawned in added)
-                    Items.DestroyItem(spawned);
-                Alerts.ShowOnce("Not enough pack space. Nothing was removed.");
+                Alert($"{item.itemDefinition.displayName} has no attachments or enchantments to remove.");
                 return;
             }
-            foreach (var candidate in pack.AllItems())
+
+            // What we hand back: attachments + the oil/scroll item behind each enchantment.
+            List<ItemDefinition> recovered = new List<ItemDefinition>();
+            recovered.AddRange(attachments);
+            int unrecoverable = 0;
+            foreach (EnchantmentDefinition enchantment in enchantments)
             {
-                if (!before.Contains(candidate) && !added.Contains(candidate))
-                    added.Add(candidate);
+                if (enchantment.ItemThatAppliedThis != null) recovered.Add(enchantment.ItemThatAppliedThis);
+                else unrecoverable++;
             }
-        }
 
-        if (cost > 0)
-            Coins.Pay(player, cost);
+            var player = StaticInstance<GameManager>.Instance.PlayerUnit;
+            if (player == null || player.Stats == null) return;
 
-        if (item.attachments != null)
-        {
-            var copy = new List<ItemDefinition>(item.attachments);
-            foreach (var attachment in copy)
-                item.RemoveAttachment(attachment);
-        }
-        if (item.enchantments != null)
-        {
-            var copy = new List<EnchantmentDefinition>(item.enchantments);
-            foreach (var enchantment in copy)
+            int cost = FlatCost.Value;
+            if (cost > 0 && player.Stats.GetCoins(StaticInstance<GameManager>.Instance.InSafeZone) < cost)
             {
-                item.RemoveEnchantment(enchantment);
-                item.enchantments.Remove(enchantment);
+                Alert($"Disassembly costs {cost} coins.");
+                return;
             }
-        }
-        if (DestroyWeapon.Value)
-            Items.DestroyItem(item);
 
-        string note = "Stripped " + (returns.Count - oils) + " attachments and " + oils + " oils.";
-        if (missingOils > 0)
-            note += " " + missingOils + " oils had no item to return.";
-        Alerts.ShowOnce(note);
-    }
-}
-
-static class Items
-{
-    static readonly System.Reflection.MethodInfo Destroy = AccessTools.Method(typeof(InventoryItem), "DestroyFromInventory");
-
-    internal static void DestroyItem(InventoryItem item)
-    {
-        if (item != null && Destroy != null)
-            Destroy.Invoke(item, null);
-    }
-}
-
-static class Coins
-{
-    internal static void Pay(PerfectRandom.Sulfur.Core.Units.Unit player, int cost)
-    {
-        int remaining = cost;
-        if (StaticInstance<GameManager>.Instance.InSafeZone)
-        {
-            int stash = player.Stats.GetCoinsStash();
-            int fromStash = Mathf.Min(stash, remaining);
-            if (fromStash > 0)
+            // Add everything first; abort untouched if it does not fit.
+            ItemGrid backpack = StaticInstance<UIManager>.Instance.PlayerBackpackGrid;
+            List<ItemDefinition> added = new List<ItemDefinition>();
+            foreach (ItemDefinition part in recovered)
             {
-                player.Stats.ModifyCoinsStash(-fromStash, Plugin.Instance);
-                remaining -= fromStash;
+                if (backpack.AddItem(part, isPickup: true, announce: true))
+                {
+                    added.Add(part);
+                }
+                else
+                {
+                    foreach (ItemDefinition rollback in added) backpack.RemoveItem(rollback, "Disassemble rollback", 1);
+                    Alert("Not enough backpack space to disassemble.");
+                    return;
+                }
             }
-        }
-        if (remaining > 0)
-            player.Stats.ModifyCoins(-remaining, Plugin.Instance);
-    }
-}
 
-static class Alerts
-{
-    internal static void ShowOnce(string text)
-    {
-        var ui = StaticInstance<UIManager>.Instance;
-        if (ui == null)
-            return;
-        var field = AccessTools.Field(typeof(UIManager), "queuedSmallAlerts");
-        if (field != null && field.GetValue(ui) is List<AnnouncementText> queue)
-            queue.RemoveAll(entry => entry != null && entry.text == text);
-        ui.ShowSmallAlert(text, 2.5f, UISounds.None);
-    }
-}
+            if (cost > 0) player.Stats.ModifyCoins(-cost, "Disassemble Anywhere");
 
-static class Keys
-{
-    internal static bool Down(KeyCode code)
-    {
-        var keyboard = Keyboard.current;
-        if (keyboard == null || !TryMap(code, out Key key))
-            return false;
-        return keyboard[key].wasPressedThisFrame;
-    }
+            foreach (ItemDefinition attachment in attachments) item.RemoveAttachment(attachment);
+            foreach (EnchantmentDefinition enchantment in enchantments)
+            {
+                item.RemoveEnchantment(enchantment);   // removes its stat modifiers
+                item.enchantments.Remove(enchantment); // vanilla RemoveEnchantment forgets the list entry
+            }
 
-    static bool TryMap(KeyCode code, out Key key)
-    {
-        if (code >= KeyCode.A && code <= KeyCode.Z)
-        {
-            key = (Key)((int)Key.A + (code - KeyCode.A));
-            return true;
-        }
-        if (code >= KeyCode.Alpha1 && code <= KeyCode.Alpha9)
-        {
-            key = (Key)((int)Key.Digit1 + (code - KeyCode.Alpha1));
-            return true;
-        }
-        if (code == KeyCode.Alpha0)
-        {
-            key = Key.Digit0;
-            return true;
-        }
-        if (code >= KeyCode.F1 && code <= KeyCode.F12)
-        {
-            key = (Key)((int)Key.F1 + (code - KeyCode.F1));
-            return true;
-        }
-        if (code >= KeyCode.Keypad0 && code <= KeyCode.Keypad9)
-        {
-            key = (Key)((int)Key.Numpad0 + (code - KeyCode.Keypad0));
-            return true;
-        }
-        switch (code)
-        {
-            case KeyCode.Space: key = Key.Space; return true;
-            case KeyCode.Return: key = Key.Enter; return true;
-            case KeyCode.KeypadEnter: key = Key.NumpadEnter; return true;
-            case KeyCode.Escape: key = Key.Escape; return true;
-            case KeyCode.Tab: key = Key.Tab; return true;
-            case KeyCode.Backspace: key = Key.Backspace; return true;
-            case KeyCode.LeftShift: key = Key.LeftShift; return true;
-            case KeyCode.RightShift: key = Key.RightShift; return true;
-            case KeyCode.LeftControl: key = Key.LeftCtrl; return true;
-            case KeyCode.RightControl: key = Key.RightCtrl; return true;
-            case KeyCode.LeftAlt: key = Key.LeftAlt; return true;
-            case KeyCode.RightAlt: key = Key.RightAlt; return true;
-            case KeyCode.UpArrow: key = Key.UpArrow; return true;
-            case KeyCode.DownArrow: key = Key.DownArrow; return true;
-            case KeyCode.LeftArrow: key = Key.LeftArrow; return true;
-            case KeyCode.RightArrow: key = Key.RightArrow; return true;
-            default:
-                key = Key.None;
-                return false;
+            string name = item.itemDefinition.displayName;
+            if (DestroyWeapon.Value) item.GetRemovedByExternalFactor("Disassembled (mod)");
+
+            SulfurSaveState.WriteActiveToDisk();
+            Alert($"Disassembled {name}: {attachments.Count} attachment(s), {enchantments.Count - unrecoverable} oil/scroll(s) recovered" +
+                  (unrecoverable > 0 ? $" ({unrecoverable} enchantment(s) had no recoverable item)" : "") +
+                  (DestroyWeapon.Value ? ", weapon destroyed." : "."));
         }
     }
 }
